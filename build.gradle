@@ -1,0 +1,90 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.0.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.graalvm.buildtools.native' version '0.11.3'
+    id 'application'
+}
+
+group = 'com.jupiter'
+version = '0.0.1-SNAPSHOT'
+description = 'transcript'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+application {
+    mainClass = 'com.jupiter.transcript.TranscriptApplication'
+}
+
+
+repositories {
+    mavenCentral()
+}
+
+graalvmNative {
+    metadataRepository {
+        version = '0.3.15'
+    }
+
+//    agent {
+//        defaultMode = "standard"
+//        enabled = true
+//
+//        modes {
+//            standard {
+//            }
+//
+//            direct {
+//                options.add("config-merge-dir=target/native-config/")
+//                options.add("experimental-configuration-with-origins")
+//            }
+//        }
+//    }
+
+    binaries {
+        main {
+//            jvmArgs.add("-Xmx4g")
+
+            buildArgs.add('--enable-all-security-services')
+            buildArgs.add('-O2')
+            buildArgs.add('-march=compatibility')
+//            buildArgs.add('-H:ConfigurationFileDirectories=./target/native-config')
+//            buildArgs.add('-H:ReflectionConfigurationFiles=reflect-config.json')
+//            buildArgs.add('--emit build-report')
+            buildArgs.add('--enable-monitoring=jfr')
+
+        }
+
+    }
+}
+
+
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-restclient'
+    implementation group: 'commons-codec', name: 'commons-codec', version: '1.13'
+//    implementation group: 'net.sf.json-lib', name: 'json-lib', version: '2.4', classifier: 'jdk15'
+    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.18.0'
+    implementation("com.aliyun:alimt20181012:1.5.2")
+    implementation("com.aliyun:tea-openapi:0.3.11")
+    implementation("com.tencentcloudapi:tencentcloud-sdk-java-tmt:3.1.1353")
+    implementation 'io.github.classgraph:classgraph:4.8.173'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-restclient-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
