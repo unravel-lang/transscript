@@ -212,18 +212,20 @@ public class WebDavBrowserService {
             String path = arrayDeque.poll();
             List<DavResource> list = buildSardine().list(encodingPath(path));
             for (DavResource res : list) {
-                if (path.equals(res.getPath())) {
+                String remotePath = res.getPath();
+                if (path.equals(remotePath)) {
                     continue;
                 }
                 if (res.isDirectory()) {
-                    arrayDeque.add(res.getPath().endsWith("/") ? res.getPath() : res.getPath() + "/");
+                    arrayDeque.add(remotePath.endsWith("/") ? remotePath : remotePath + "/");
                     continue;
                 }
+                String resPath = "/" +Strings.CS.removeStart(remotePath,syncRemotePath);
                 String name = StringUtils.defaultString(res.getName());
                 if (name.endsWith(".jpeg") || name.endsWith(".jpg") || name.endsWith(".apk")) {
                     continue;
                 }
-                if (!fileCache.containsKey(res.getPath())
+                if (!fileCache.containsKey(resPath)
 //                        || !(fileCache.get(res.getPath()).size == res.getContentLength())
                 ) {
                     downloadList.add(res);
@@ -231,14 +233,12 @@ public class WebDavBrowserService {
             }
         }
 
-        long start = System.currentTimeMillis();
         if (!downloadList.isEmpty()) {
             Thread.startVirtualThread(() -> {
                 Thread.currentThread().setName("vir-async-download-task");
                 downloadFile(downloadList);
                 log.info("虚拟线程内执行完毕");
             });
-//            System.out.println( System.currentTimeMillis() - start +"本地定时任务完毕");
         }
         log.info("本地定时任务完毕");
 
