@@ -6,10 +6,13 @@ import com.jupiter.transcript.utils.SrtGenerator;
 import com.jupiter.transcript.utils.SrtTranslator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.lang.NonNull;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -20,15 +23,30 @@ import java.util.List;
 
 @ImportRuntimeHints(MyHints.class)
 @Slf4j
+@EnableScheduling
 @SpringBootApplication
 public class TranscriptApplication {
 
+    @Value("${transcript.enable:false}")
+    private static boolean enable;
+
     static void main(String[] args) throws Exception {
+        System.setProperty("TENCENTCLOUD_SECRET_ID", "AKIDaWN3WpxzqVyWzGZovqaDi5XuQuIWZWKv");
+        System.setProperty("TENCENTCLOUD_SECRET_KEY", "TnwscDpIbjf1Tt9C41rWyFKEwXvUqBQi");
         SpringApplication.run(TranscriptApplication.class, args);
         String filePath = System.getProperty("VIDEO_FILE_PATH");
         String srcLang = System.getProperty("SRC_LANG");
+        if (enable) {
+            videoConvert(filePath == null ? "Z:\\vodei" : filePath, srcLang == null ? "ja" : srcLang);
+            log.info("转录翻译完成");
+        }
+    }
+
+//    @Scheduled(cron = "0 * * * * *")
+    public void runSchedule() throws Exception {
+        String filePath = System.getProperty("VIDEO_FILE_PATH");
+        String srcLang = System.getProperty("SRC_LANG");
         videoConvert(filePath == null ? "Z:\\vodei" : filePath, srcLang == null ? "ja" : srcLang);
-        log.info("转录翻译完成");
     }
 
     private static void videoConvert(String filePath,String srclang) throws Exception {

@@ -55,6 +55,13 @@ graalvmNative {
         main {
 //            jvmArgs.add("-Xmx4g")
 
+            // 在构建镜像时启用预览特性
+            buildArgs.add('--enable-preview')
+
+            // 如果你的代码在生成镜像的过程中需要运行（例如初始化），
+            // 有时也需要配置 jvmArgs
+            jvmArgs.add('--enable-preview')
+
             buildArgs.add('--enable-all-security-services')
             buildArgs.add('-O2')
             buildArgs.add('-march=compatibility')
@@ -72,17 +79,35 @@ graalvmNative {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-restclient'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation group: 'commons-codec', name: 'commons-codec', version: '1.13'
+    implementation 'org.apache.commons:commons-lang3:3.20.0'
 //    implementation group: 'net.sf.json-lib', name: 'json-lib', version: '2.4', classifier: 'jdk15'
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.18.0'
     implementation("com.aliyun:alimt20181012:1.5.2")
     implementation("com.aliyun:tea-openapi:0.3.11")
     implementation("com.tencentcloudapi:tencentcloud-sdk-java-tmt:3.1.1353")
     implementation 'io.github.classgraph:classgraph:4.8.173'
+    implementation("com.google.guava:guava:33.5.0-jre")
+    implementation 'com.github.lookfirst:sardine:5.13'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-restclient-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << "--enable-preview"
+}
+
+
+tasks.withType(Test).configureEach {
+    jvmArgs += "--enable-preview"
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs += "--enable-preview"
 }
 
 tasks.named('test') {

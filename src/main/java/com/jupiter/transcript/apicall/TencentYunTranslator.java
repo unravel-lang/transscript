@@ -1,5 +1,6 @@
 package com.jupiter.transcript.apicall;
 
+import com.google.common.util.concurrent.RateLimiter;
 import com.tencentcloudapi.common.AbstractModel;
 import com.tencentcloudapi.common.Credential;
 import com.tencentcloudapi.common.profile.ClientProfile;
@@ -11,10 +12,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
+@SuppressWarnings("UnstableApiUsage")
 public class TencentYunTranslator implements  ApiCall{
 
     private volatile Credential cred;
     private volatile TmtClient client;
+    private final RateLimiter reqRateLimiter = RateLimiter.create(5); // 每秒最多5次
 
 
     private Credential buildCred() {
@@ -49,7 +52,8 @@ public class TencentYunTranslator implements  ApiCall{
         req.setSource(source);
         req.setTarget(target);
         req.setProjectId(1352639L);
-        TimeUnit.MILLISECONDS.sleep(200);
+//        TimeUnit.MILLISECONDS.sleep(200);
+        reqRateLimiter.acquire();
         // 返回的resp是一个TextTranslateResponse的实例，与请求对象对应
         TextTranslateResponse resp = client.TextTranslate(req);
         return resp.getTargetText();

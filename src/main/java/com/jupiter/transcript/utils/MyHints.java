@@ -24,6 +24,12 @@ public class MyHints implements RuntimeHintsRegistrar {
         // 执行扫描
         Set<BeanDefinition> components1 = scanner.findCandidateComponents("com.tencentcloudapi.common");
         reflectionReg(hints, classLoader, components1);
+        // 执行扫描
+//        Set<BeanDefinition> components2 = scanner.findCandidateComponents("com.github.sardine");
+//        reflectionReg(hints, classLoader, components2);
+        // 执行扫描
+        Set<BeanDefinition> components3 = scanner.findCandidateComponents("org.apache.tools.an");
+        reflectionReg(hints, classLoader, components3);
 
     }
 
@@ -39,7 +45,9 @@ public class MyHints implements RuntimeHintsRegistrar {
 
                 hints.reflection()
                         .registerType(clazz,
-                                builder -> builder.withMembers(MemberCategory.INVOKE_PUBLIC_METHODS, MemberCategory.ACCESS_DECLARED_FIELDS));
+                                builder -> builder.withMembers(MemberCategory.INVOKE_PUBLIC_METHODS,
+                                        MemberCategory.ACCESS_DECLARED_FIELDS,
+                                MemberCategory.UNSAFE_ALLOCATED));
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }

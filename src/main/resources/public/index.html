@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WebDAV 文件监控</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+</head>
+<body>
+<h2>网盘文件列表 (实时更新)</h2>
+<ul id="file-list"></ul>
+
+<div id="breadcrumb">
+    <button onclick="goBack()">返回上一级</button>
+    <span id="path-display">/</span>
+</div>
+<table border="1">
+    <thead>
+    <tr>
+        <th>名称</th>
+        <th>类型</th>
+        <th>大小</th>
+        <th>修改时间</th>
+    </tr>
+    </thead>
+    <tbody id="file-table-body"></tbody>
+</table>
+<script>
+    const socket = new SockJS('/ws-endpoint');
+    const stompClient = Stomp.over(socket);
+
+    stompClient.connect({}, function (frame) {
+        console.log('Connected: ' + frame);
+        // 订阅后端推送的消息
+        stompClient.subscribe('/topic/files', function (message) {
+            const files = JSON.parse(message.body);
+            updateUI(files);
+        });
+    });
+
+    function updateUI(files) {
+        const listElement = document.getElementById('file-list');
+        listElement.innerHTML = '';
+        files.forEach(file => {
+            const li = document.createElement('li');
+            li.textContent = file;
+            listElement.appendChild(li);
+        });
+    }
+    let currentPath = "/";
+
+    // 加载指定路径的文件
+    async function loadFiles(path) {
+        currentPath = path;
+        document.getElementById('path-display').innerText = path;
+
+        const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+        const files = await response.json();
+        renderTable(files);
+    }
+
+    function formatBytes(size) {
+        // 格式化文件size
+        if (size < 1024) return size + " B";
+        const units = ["KB", "MB", "GB", "TB"];
+        let unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        return size.toFixed(2) + " " + units[unitIndex];
+    }
+
+    function renderTable(files) {
+        const tbody = document.getElementById('file-table-body');
+        tbody.innerHTML = '';
+
+        files.forEach(file => {
+            const tr = document.createElement('tr');
+            // 如果是文件夹，点击名称调用 loadFiles
+            const nameHtml = file.isDirectory
+                ? `<a href="#" onclick="loadFiles('${file.path}')">📁 ${file.name}</a>`
+                : `📄 ${file.name} <button onclick="downloadFile('${file.path}')">下载</button>`;
+
+            tr.innerHTML = `
+            <td>${nameHtml}</td>
+            <td>${file.isDirectory ? '文件夹' : '文件'}</td>
+            <td>${file.isDirectory ? '-' : formatBytes(file.size)}</td>
+            <td>${file.lastModified}</td>
+        `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function goBack() {
+        if (currentPath === "/") return;
+        const parts = currentPath.split('/').filter(Boolean);
+        parts.pop();
+        loadFiles("/" + parts.join('/'));
+    }
+
+
+    function downloadFile(filePath) {
+        // 直接跳转或开新窗口，浏览器会自动识别 attachment 响应头并开始下载
+        window.location.href = `/api/download?path=${encodeURIComponent(filePath)}`;
+    }
+    // 初始加载
+    loadFiles("/");
+
+</script>
+</body>
+</html>
