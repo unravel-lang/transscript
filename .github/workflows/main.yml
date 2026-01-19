@@ -49,7 +49,7 @@ jobs:
           
           # 如果你的项目没有使用 Spring Boot Native，而是直接使用 native-image 命令
           # 你可能需要像这样调用 native-image，并确保类路径正确
-          ./gradlew nativeBuild --enable-preview
+          ./gradlew nativeBuild
 
         
         env:
