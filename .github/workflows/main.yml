@@ -1,0 +1,75 @@
+name: Build ARM64 GraalVM Native Image
+
+on:
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+  #   branches:
+  #     - main
+  workflow_dispatch: # 允许手动触发工作流
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  build-arm64-native-image:
+    runs-on: ubuntu-24.04-arm 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java and GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25' # 根据你的项目需求选择 Java 版本，GraalVM 建议使用 LTS 版本
+          distribution: 'graalvm'
+          components: 'native-image' # 确保安装 Native Image 组件
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'gradle' # 缓存 Maven 依赖，加速构建
+          native-image-job-reports: 'true'
+          
+      - name: Verify GraalVM Native Image setup
+        run: |
+          # gu list
+          native-image --version
+          
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Build Project with Maven (or Gradle)
+        run: |
+          
+          # 如果你的项目没有使用 Spring Boot Native，而是直接使用 native-image 命令
+          # 你可能需要像这样调用 native-image，并确保类路径正确
+          ./gradlew nativeBuild --enable-preview
+
+        
+        env:
+          # 设置环境变量，帮助 Native Image 工具理解目标架构
+          # 具体变量名可能因 GraalVM 和工具链版本而异
+          # 这通常由 graalvm/setup-graalvm@v1 自动处理，但手动设置有时有帮助
+          GRAALVM_HOME: ${{ env.JAVA_HOME }}
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+          # 如果需要特定的交叉编译工具链路径，可以在这里添加
+          # PATH: "${{ env.GRAALVM_HOME }}/bin:${PATH}" # 确保工具链在PATH中
+          
+      - name: Verify Native Image Existence
+        run: |
+          # 检查生成的 ARM64 原生可执行文件是否存在
+          # 假设生成的可执行文件在 target/ 目录下，名为 your-arm64-app
+          ls -l  build/native/nativeCompile/jrebelLicense # 替换为你的实际文件名
+          file build/native/nativeCompile/jrebelLicense # 检查可执行文件的架构信息
+          
+      - name: Upload Native Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-native-image
+          path: build/native/nativeCompile/jrebelLicense # 替换为你的实际可执行文件路径
