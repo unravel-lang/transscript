@@ -65,11 +65,11 @@ jobs:
         run: |
           # 检查生成的 ARM64 原生可执行文件是否存在
           # 假设生成的可执行文件在 target/ 目录下，名为 your-arm64-app
-          ls -l  build/native/nativeCompile/jrebelLicense # 替换为你的实际文件名
-          file build/native/nativeCompile/jrebelLicense # 检查可执行文件的架构信息
+          ls -l  build/native/nativeCompile/transcript # 替换为你的实际文件名
+          file build/native/nativeCompile/transcript # 检查可执行文件的架构信息
           
       - name: Upload Native Image Artifact
         uses: actions/upload-artifact@v4
         with:
           name: arm64-native-image
-          path: build/native/nativeCompile/jrebelLicense # 替换为你的实际可执行文件路径
+          path: build/native/nativeCompile/transcript # 替换为你的实际可执行文件路径
