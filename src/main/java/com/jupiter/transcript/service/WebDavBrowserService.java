@@ -253,8 +253,8 @@ public class WebDavBrowserService {
                     continue;
                 }
                 String path = Strings.CS.removeEnd(Strings.CS.replace(
-                        Strings.CS.removeStart(davPath, webdavUrl + syncRemotePath),
-                        "/", "\\"), "/");
+                        Strings.CS.removeStart(davPath,  syncRemotePath),
+                        "/", File.separator), "/");
                 Path target = Paths.get(syncLocalPath, path + ".tmp");
 
                 StructuredTaskScope.Subtask<Object> subtask = scope.fork(() -> {
