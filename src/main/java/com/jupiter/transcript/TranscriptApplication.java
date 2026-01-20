@@ -9,10 +9,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.lang.NonNull;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -41,7 +43,13 @@ public class TranscriptApplication {
             log.info("转录翻译完成");
         }
     }
-
+    @Bean
+    public ThreadPoolTaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2); // 设置线程池大小
+        scheduler.setThreadNamePrefix("common-transcript-task-"); // 设置线程名前缀
+        return scheduler;
+    }
 //    @Scheduled(cron = "0 * * * * *")
     public void runSchedule() throws Exception {
         String filePath = System.getProperty("VIDEO_FILE_PATH");

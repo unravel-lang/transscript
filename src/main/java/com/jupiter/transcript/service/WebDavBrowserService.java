@@ -5,6 +5,7 @@ import com.github.sardine.Sardine;
 import com.github.sardine.impl.SardineImpl;
 import com.google.common.collect.Queues;
 import com.jupiter.transcript.vo.FileItem;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -13,8 +14,10 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StreamUtils;
@@ -31,9 +34,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
+@SuppressWarnings("preview")
 @Service
 @Slf4j
 public class WebDavBrowserService {
@@ -52,9 +57,21 @@ public class WebDavBrowserService {
     @Value("${webdav.syncRemotePath:/sync/test/}")
     private String syncRemotePath;
 
+    @Autowired
+    private ThreadPoolTaskScheduler scheduler;
+    private long currentDelay = 5;
+    private long increaseDelay = 100;
+
+    private int emptyQueueCount = 0;
+
+
     private volatile Sardine sardine = null;
     private Map<DavResource, FileInfo> downloadingMap = new ConcurrentHashMap<>();
+    @PostConstruct
+    public void startDynamicTask() {
+        scheduleNext();
 
+    }
     public Sardine buildSardine() {
         if (sardine == null) {
             synchronized (this) {
@@ -183,8 +200,32 @@ public class WebDavBrowserService {
     }
 
 
+
+
+
+
+    private void scheduleNext() {
+        scheduler.schedule(() -> {
+            // 执行业务逻辑
+            try {
+                scanWebDav();
+            } catch (IOException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            // 动态增加
+            currentDelay += emptyQueueCount * increaseDelay;
+            if (currentDelay > 1800) {
+                currentDelay = 1800;
+            }
+            // 递归调度下一次
+            scheduleNext();
+        }, Instant.now().plusSeconds(currentDelay));
+    }
+
+
     // 每 10 秒扫描一次
-    @Scheduled(fixedDelay = 100_000, initialDelay = 1000)
+//    @Scheduled(fixedDelay = 100_000, initialDelay = 1000)
     public void scanWebDav() throws IOException, InterruptedException {
         int availablePermits = SEMAPHORE.availablePermits();
         if (!downloadingMap.isEmpty()) {
@@ -232,13 +273,14 @@ public class WebDavBrowserService {
                 }
             }
         }
-
+        emptyQueueCount++;
         if (!downloadList.isEmpty()) {
             Thread.startVirtualThread(() -> {
                 Thread.currentThread().setName("vir-async-download-task");
                 downloadFile(downloadList);
                 log.info("虚拟线程内执行完毕");
             });
+            emptyQueueCount = 0;
         }
         log.info("本地定时任务完毕");
 
@@ -313,12 +355,11 @@ public class WebDavBrowserService {
                             throw new RuntimeException(e);
                         } finally {
                             currentTaskMap.remove(davPath);
-                            if (file != null) {
-                                try {
-                                    file.close();
-                                } catch (IOException e) {
-                                    log.info("file try close failed");
-                                }
+                            downloadingMap.remove(davResource);
+                            try {
+                                file.close();
+                            } catch (IOException e) {
+                                log.info("file try close failed");
                             }
                         }
 
@@ -336,7 +377,7 @@ public class WebDavBrowserService {
             for (StructuredTaskScope.Subtask<Object> subtask : subtasks) {
                 if (subtask.state() == StructuredTaskScope.Subtask.State.FAILED) {
                     Throwable cause = subtask.exception();
-                    log.error("子进程出现异常" + cause.getMessage());
+                    log.error("子进程出现异常{}", cause.getMessage());
                 }
             }
             log.info("download {} files", downloadList.size());
