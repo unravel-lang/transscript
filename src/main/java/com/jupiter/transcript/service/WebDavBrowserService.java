@@ -59,7 +59,7 @@ public class WebDavBrowserService {
 
     @Autowired
     private ThreadPoolTaskScheduler scheduler;
-    private long currentDelay = 5;
+    private long currentDelay = 10;
     private long increaseDelay = 100;
 
     private int emptyQueueCount = 0;
@@ -238,7 +238,9 @@ public class WebDavBrowserService {
                 Long lastModify = value.lastModify();
                 value.setLastModify(System.currentTimeMillis());
                 DavResource resource = entry.getKey();
-                log.info("file {} process is {}% download avg speed is {}", resource.getPath(), (float) value.size / resource.getContentLength(), (float) value.size / (System.currentTimeMillis() - lastModify));
+                log.info("file {} process is {}% download avg speed is {}", resource.getPath(),
+                        ((float) value.size / resource.getContentLength() * 100),
+                        (float) value.size / (System.currentTimeMillis() - lastModify));
             }
         }
         if (availablePermits <= 0) {
@@ -266,7 +268,7 @@ public class WebDavBrowserService {
                 if (name.endsWith(".jpeg") || name.endsWith(".jpg") || name.endsWith(".apk")) {
                     continue;
                 }
-                if (!fileCache.containsKey(resPath)
+                if (!fileCache.containsKey(resPath) || !(fileCache.containsKey(StringUtils.removeStart(resPath, "/")))
 //                        || !(fileCache.get(res.getPath()).size == res.getContentLength())
                 ) {
                     downloadList.add(res);
