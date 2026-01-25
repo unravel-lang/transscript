@@ -271,6 +271,7 @@ public class WebDavBrowserService {
                 if (!fileCache.containsKey(resPath) || !(fileCache.containsKey(StringUtils.removeStart(resPath, "/")))
 //                        || !(fileCache.get(res.getPath()).size == res.getContentLength())
                 ) {
+                    log.info("res didn't fond in local cache,add to download list:{}", resPath);
                     downloadList.add(res);
                 }
             }
@@ -421,6 +422,7 @@ public class WebDavBrowserService {
         String path = curFile.getPath();
         path = Strings.CS.removeStart(path, syncLocalPath);
         path = path.replace("\\", "/");
+        log.debug("put file {} to cache", path);
         fileCache.put(path, new FileInfo(curFile.length(), curFile.lastModified()));
     }
 
