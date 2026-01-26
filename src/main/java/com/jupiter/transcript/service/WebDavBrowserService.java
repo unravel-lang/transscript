@@ -274,7 +274,7 @@ public class WebDavBrowserService {
                 if (name.endsWith(".jpeg") || name.endsWith(".jpg") || name.endsWith(".apk")) {
                     continue;
                 }
-                if (!fileCache.containsKey(resPath) || !(fileCache.containsKey(StringUtils.removeStart(resPath, "/")))
+                if (!(fileCache.containsKey(resPath) || (fileCache.containsKey(StringUtils.removeStart(resPath, "/"))))
 //                        || !(fileCache.get(res.getPath()).size == res.getContentLength())
                 ) {
                     log.info("res didn't fond in local cache,add to download list:{}", resPath);
