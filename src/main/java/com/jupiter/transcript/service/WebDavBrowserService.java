@@ -11,13 +11,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
+import org.apache.commons.lang3.function.Failable;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -37,7 +38,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.StructuredTaskScope;
 
 @SuppressWarnings("preview")
 @Service
@@ -303,12 +306,18 @@ public class WebDavBrowserService {
                 if (currentTaskMap.containsKey(davPath)) {
                     continue;
                 }
+                String remotePath = Strings.CS.removeStart(davPath, syncRemotePath);
+                if (new File(Paths.get(syncLocalPath, remotePath).toString()).exists()) {
+                    log.info("file {} has already exist,skip", remotePath);
+                    // 缓存更新不及时，多进行一次判断
+                    continue;
+                }
                 String path = Strings.CS.removeEnd(Strings.CS.replace(
-                        Strings.CS.removeStart(davPath,  syncRemotePath),
+                        remotePath,
                         "/", File.separator), "/");
                 Path target = Paths.get(syncLocalPath, path + ".tmp");
 
-                StructuredTaskScope.Subtask<Object> subtask = scope.fork(() -> {
+                var subtask = scope.fork(() -> {
                     Thread.currentThread().setName("worker-" + davResource.getName());
 
                     try {
@@ -316,29 +325,12 @@ public class WebDavBrowserService {
                         // 在子任务开始执行时重命名
                         // 3. 准备 WebDAV 请求头
                         Map<String, String> davHeaders = new HashMap<>();
-
-                        RandomAccessFile file = null;
-                        try {
-                            if (Files.exists(target)) {
-                                log.info("remote file {},has already a legacy tempFile:{}", davResource.getPath(), target);
-                                file = new RandomAccessFile(target.toFile(), "rw");
-                                long length = file.length();
-                                if (length == davResource.getContentLength() || length > davResource.getContentLength()) {
-                                    log.info("temp file size has the same as remote file {}", davResource.getPath());
-                                    file.close();
-                                    return;
-                                }
-                                // 5. 调用 Sardine 获取特定范围的流并转发
-                                davHeaders.put("Range", "bytes=" + length + "-" + davResource.getContentLength());
-                            } else {
-                                if (!Files.exists(target.getParent())) {
-                                    Files.createDirectories(target.getParent());
-                                }
-                                file = new RandomAccessFile(target.toFile(), "rw");
-                            }
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
+                        //检查文件是否存在，如果存在则验证文件大小，如果文件大小匹配则重命名并返回null，否则返回RandomAccessFile对象用于续传
+                        RandomAccessFile file = checkFileExistsOrElseGetTempFile(davResource, target, davHeaders);
+                        if (file == null){
+                            return;
                         }
+
 
                         try (InputStream is = sardine.get(encodingPath(davPath), davHeaders)) {
                             currentTaskMap.put(davPath, true);
@@ -355,7 +347,6 @@ public class WebDavBrowserService {
                                 downloadSize += len;
                                 fileInfo.setSize(downloadSize);
                             }
-                            file.close();
                             Files.move(target, Paths.get(Strings.CS.removeEnd(target.toString(), ".tmp")), StandardCopyOption.REPLACE_EXISTING);
                             downloadingMap.remove(davResource);
                             log.info("download {} finish", davResource.getPath());
@@ -363,36 +354,76 @@ public class WebDavBrowserService {
                             log.error("remote file {} download failed error", davResource.getPath(), e);
                             throw new RuntimeException(e);
                         } finally {
-                            currentTaskMap.remove(davPath);
-                            downloadingMap.remove(davResource);
-                            try {
-                                file.close();
-                            } catch (IOException e) {
-                                log.info("file try close failed");
-                            }
+                            Failable.asConsumer(RandomAccessFile::close).accept(file);
                         }
 
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     } finally {
+                        currentTaskMap.remove(davPath);
+                        downloadingMap.remove(davResource);
                         SEMAPHORE.release();
                     }
 
                     log.info("file {} download finish", davResource.getPath());
                 });
+
                 subtasks.add(subtask);
             }
             scope.join();
-            for (StructuredTaskScope.Subtask<Object> subtask : subtasks) {
+            for (var subtask : subtasks) {
                 if (subtask.state() == StructuredTaskScope.Subtask.State.FAILED) {
                     Throwable cause = subtask.exception();
                     log.error("子进程出现异常{}", cause.getMessage());
                 }
             }
-            log.info("download {} files", downloadList.size());
+            log.info("current download list size {}", downloadList.size());
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * 检查文件是否存在，如果存在则验证文件大小，如果文件大小匹配则重命名并返回null，否则返回RandomAccessFile对象用于续传
+     * 如果文件不存在，则创建父目录并返回RandomAccessFile对象用于下载
+     *
+     * @param davResource DAV资源对象，包含远程文件信息
+     * @param target 本地文件路径
+     * @param davHeaders DAV头部信息映射，用于设置Range头部
+     * @return 如果文件已存在且大小匹配则返回null，否则返回RandomAccessFile对象用于续传或下载
+     */
+    private static @Nullable RandomAccessFile checkFileExistsOrElseGetTempFile(DavResource davResource, Path target, Map<String, String> davHeaders) {
+        RandomAccessFile file;  // 用于操作文件的RandomAccessFile对象
+        try {
+        // 检查目标文件是否存在
+            if (Files.exists(target)) {
+            // 记录日志：远程文件已存在对应的临时文件
+                log.info("remote file {},has already a legacy tempFile:{}", davResource.getPath(), target);
+            // 以读写模式打开文件
+                file = new RandomAccessFile(target.toFile(), "rw");
+            // 获取文件长度
+                long length = file.length();
+            // 检查文件长度是否与远程文件长度相同或更大
+                if (length == davResource.getContentLength() || length > davResource.getContentLength()) {
+                // 记录日志：临时文件大小与远程文件相同
+                    log.info("temp file size has the same as remote file {}", davResource.getPath());
+                // 移除文件名中的".tmp"后缀
+                    Files.move(target, Paths.get(Strings.CS.removeEnd(target.toString(), ".tmp")), StandardCopyOption.REPLACE_EXISTING);
+                    file.close();
+                    return null;
+                }
+                // 5. 调用 Sardine 获取特定范围的流并转发
+                davHeaders.put("Range", "bytes=" + length + "-" + davResource.getContentLength());
+            } else {
+                if (!Files.exists(target.getParent())) {
+                    Files.createDirectories(target.getParent());
+                }
+                file = new RandomAccessFile(target.toFile(), "rw");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return file;
     }
 
     private void buildLocalFileCache() throws IOException {
