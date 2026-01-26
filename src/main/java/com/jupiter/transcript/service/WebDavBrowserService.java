@@ -4,6 +4,7 @@ import com.github.sardine.DavResource;
 import com.github.sardine.Sardine;
 import com.github.sardine.impl.SardineImpl;
 import com.google.common.collect.Queues;
+import com.google.gson.Gson;
 import com.jupiter.transcript.vo.FileItem;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
@@ -251,6 +252,9 @@ public class WebDavBrowserService {
         List<DavResource> downloadList = new ArrayList<>();
         ArrayDeque<String> arrayDeque = Queues.newArrayDeque();
         arrayDeque.add(syncRemotePath);
+        if (log.isDebugEnabled()) {
+            log.debug("本地缓存内容:{}", new Gson().toJson(fileCache));
+        }
         while (!arrayDeque.isEmpty()) {
             String path = arrayDeque.poll();
             List<DavResource> list = buildSardine().list(encodingPath(path));
@@ -263,7 +267,9 @@ public class WebDavBrowserService {
                     arrayDeque.add(remotePath.endsWith("/") ? remotePath : remotePath + "/");
                     continue;
                 }
-                String resPath = "/" +Strings.CS.removeStart(remotePath,syncRemotePath);
+                String resPath = Strings.CS.removeStart(remotePath,syncRemotePath);
+                resPath = resPath.startsWith("/") ? resPath : "/" + resPath;
+
                 String name = StringUtils.defaultString(res.getName());
                 if (name.endsWith(".jpeg") || name.endsWith(".jpg") || name.endsWith(".apk")) {
                     continue;
